@@ -5,3 +5,4 @@
 #include "core/block_reduce.cuh"
 #include "builders/elementwise.cuh"
 #include "builders/reduction.cuh"
+#include "ops/matmul.cuh"

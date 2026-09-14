@@ -31,7 +31,7 @@ Coverage:
 | `4_reduction` | two-pass reduction + `block_reduce` |
 | `5_softmax` | `block_reduce_all` statistics + `launch` |
 | `113_layer_normalization` | per-row mean/variance |
-| `2_matrix_multiplication` | tiled GEMM |
+| `2_matrix_multiplication` | `ops::mat_mul` skeleton (tiled GEMM) |
 
 ## Adding an operator
 

@@ -4,8 +4,8 @@ A minimal header-only CUDA operator **framework**. C++17, float32, no
 dependencies beyond the CUDA toolkit — no build system required.
 
 The library ships no concrete operators. It provides memory management, launch
-helpers, block-reduction primitives, and two generic builders (map / reduce);
-every operator is user code.
+helpers, block-reduction primitives, two generic builders (map / reduce), and
+an `ops/` layer of reusable operator skeletons with user-supplied hooks.
 
 ```cpp
 #include <opworks>
@@ -83,6 +83,12 @@ launch(row_mean, rows, kThreads, in, out, cols);  // launch + check + sync
 | `ElementwiseBuilder(a, b)` / `ElementwiseBuilder(a)` | `.apply<Op>()` / `.apply(op)` | binary / unary elementwise op |
 | `ReductionBuilder(a)` | `.apply<Op>()` | 1-element `DeviceBuffer` |
 
+Operator skeletons (`ops/` layer, raw pointers):
+
+| Skeleton | Call | Result |
+|---|---|---|
+| `mat_mul` | `ops::mat_mul(A, B, C, M, N, K[, epilogue])` | `C(MxK) = epilogue(A(MxN) @ B(NxK))`, epilogue defaults to pass-through |
+
 `ElementwiseBuilder` vectorizes to float4 automatically when inputs are
 16-byte aligned (scalar tail + scalar fallback otherwise) — you always write a
 plain scalar functor.
@@ -114,9 +120,11 @@ include/
 │   ├── cuda_utils.cuh       # CUDA_CHECK + launch + loop macros + grid sizing
 │   ├── device_buffer.cuh    # RAII device buffer
 │   └── block_reduce.cuh     # warp-shuffle block reduction primitives
-└── builders/
-    ├── elementwise.cuh      # generic unary/binary map, float4-vectorized
-    └── reduction.cuh        # generic two-pass reduction
+├── builders/
+│   ├── elementwise.cuh      # generic unary/binary map, float4-vectorized
+│   └── reduction.cuh        # generic two-pass reduction
+└── ops/
+    └── matmul.cuh           # tiled GEMM skeleton with epilogue hook
 ```
 
 ## Design notes

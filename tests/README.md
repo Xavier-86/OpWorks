@@ -7,6 +7,7 @@ by the official LeetGPU challenge cases.
 
 - `runner/` — test runner (git submodule: local LeetGPU judge + challenge pack)
 - `solutions/` — one self-contained `.cu` per operator under test
+  (local scratch, gitignored)
 - `run.sh` — run every solution: example + functional + performance
 
 ## Usage
@@ -25,24 +26,22 @@ Coverage:
 
 | Challenge | Exercises |
 |---|---|
-| `1_vector_add` | ElementwiseBuilder, binary functor |
-| `21_relu` | ElementwiseBuilder, unary functor |
-| `4_reduction` | ReductionBuilder |
-| `5_softmax` | custom kernel: `block_reduce_all` + `launch` |
-| `113_layer_normalization` | custom kernel: per-row mean/variance |
-| `2_matrix_multiplication` | custom kernel: tiled GEMM |
+| `1_vector_add` | elementwise kernel + `OPWORKS_GRID_LOOP` |
+| `21_relu` | elementwise kernel, unary |
+| `4_reduction` | two-pass reduction + `block_reduce` |
+| `5_softmax` | `block_reduce_all` statistics + `launch` |
+| `113_layer_normalization` | per-row mean/variance |
+| `2_matrix_multiplication` | tiled GEMM |
 
 ## Adding an operator
 
 1. Create `solutions/<name>.cu` defining `extern "C" void solve(...)`; the
-   signature must match the challenge's `get_solve_signature()`. Two styles:
-   - map/reduce-shaped op: define a functor, wrap inputs with
-     `DeviceBuffer::wrap`, call the builder, `cudaMemcpy` the result back
-     (see `vector_add.cu`)
-   - anything else: write your own `__global__` kernel that writes the output
-     directly and fire it with `launch(kernel, grid, block, args...)` (see
-     `matrix_multiplication.cu`); block statistics via `block_reduce_all`
-     (see `softmax.cu`)
+   signature must match the challenge's `get_solve_signature()`. Write a
+   `__global__` kernel that writes the output pointer directly, then fire it
+   with `launch(kernel, grid, block, args...)` — framework primitives
+   (`OPWORKS_GRID_LOOP` / `OPWORKS_BLOCK_LOOP`, `block_reduce_all`,
+   `DeviceBuffer`, `num_blocks_for`) cover the boilerplate. See any existing
+   solution for the pattern.
 2. Add `run <challenge_id> <name>.cu` to `run.sh`
 
 ## Environment

@@ -87,7 +87,11 @@ Operator skeletons (`ops/` layer, raw pointers):
 
 | Skeleton | Call | Result |
 |---|---|---|
-| `mat_mul` | `ops::mat_mul(A, B, C, M, N, K[, epilogue])` | `C(MxK) = epilogue(A(MxN) @ B(NxK))`, epilogue defaults to pass-through |
+| `map` | `ops::map(a, b, out, n, op)` / `ops::map(in, out, n, op)` | binary / unary elementwise, float4 when aligned |
+| `reduce` | `ops::reduce<Op>(in, out, n)` | two-pass reduction to `out[0]` |
+| `softmax` | `ops::softmax(in, out, rows, cols)` | row-wise softmax |
+| `layer_norm` | `ops::layer_norm(in, out, gamma, beta, rows, cols, eps)` | row-wise layer normalization |
+| `mat_mul` | `ops::mat_mul(A, B, C, M, N, K[, epilogue])` | `C(MxK) = epilogue(A(MxN) @ B(NxK))` |
 
 `ElementwiseBuilder` vectorizes to float4 automatically when inputs are
 16-byte aligned (scalar tail + scalar fallback otherwise) — you always write a
@@ -121,10 +125,14 @@ include/
 │   ├── device_buffer.cuh    # RAII device buffer
 │   └── block_reduce.cuh     # warp-shuffle block reduction primitives
 ├── builders/
-│   ├── elementwise.cuh      # generic unary/binary map, float4-vectorized
-│   └── reduction.cuh        # generic two-pass reduction
-└── ops/
-    └── matmul.cuh           # tiled GEMM skeleton with epilogue hook
+│   ├── elementwise.cuh      # DeviceBuffer sugar over ops::map
+│   └── reduction.cuh        # DeviceBuffer sugar over ops::reduce
+└── ops/                     # raw-pointer operator skeletons
+    ├── elementwise.cuh      # ops::map, float4-vectorized
+    ├── reduce.cuh           # ops::reduce, two-pass
+    ├── softmax.cuh          # ops::softmax, row-wise
+    ├── layer_norm.cuh       # ops::layer_norm, row-wise
+    └── matmul.cuh           # ops::mat_mul, tiled GEMM with epilogue hook
 ```
 
 ## Design notes

@@ -5,4 +5,8 @@
 #include "core/block_reduce.cuh"
 #include "builders/elementwise.cuh"
 #include "builders/reduction.cuh"
+#include "ops/elementwise.cuh"
+#include "ops/reduce.cuh"
+#include "ops/softmax.cuh"
+#include "ops/layer_norm.cuh"
 #include "ops/matmul.cuh"

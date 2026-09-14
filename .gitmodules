@@ -1,0 +1,3 @@
+[submodule "tests/runner"]
+	url = https://github.com/Xavier-86/LeetGPU-local
+	path = tests/runner

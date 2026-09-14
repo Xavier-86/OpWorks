@@ -8,8 +8,7 @@
   do {                                                                       \
     cudaError_t err_ = (expr);                                               \
     if (err_ != cudaSuccess) {                                               \
-      std::fprintf(stderr, "[OpWorks] CUDA error %s at %s:%d: %s\n", #expr,  \
-                   __FILE__, __LINE__, cudaGetErrorString(err_));            \
+      std::fprintf(stderr, "[OpWorks] CUDA error %s at %s:%d: %s\n", #expr, __FILE__, __LINE__, cudaGetErrorString(err_)); \
       std::abort();                                                          \
     }                                                                        \
   } while (0)
@@ -30,10 +29,8 @@ inline int num_blocks_for(int n) {
   static const int max_blocks = [] {
     int dev = 0, sm_count = 0, tpm = 0;
     OPWORKS_CUDA_CHECK(cudaGetDevice(&dev));
-    OPWORKS_CUDA_CHECK(
-        cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, dev));
-    OPWORKS_CUDA_CHECK(
-        cudaDeviceGetAttribute(&tpm, cudaDevAttrMaxThreadsPerMultiProcessor, dev));
+    OPWORKS_CUDA_CHECK(cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, dev));
+    OPWORKS_CUDA_CHECK(cudaDeviceGetAttribute(&tpm, cudaDevAttrMaxThreadsPerMultiProcessor, dev));
     int per_sm = tpm / kThreads;
     return sm_count * per_sm * kNumWaves;
   }();
@@ -54,8 +51,7 @@ inline int num_blocks_for(int n) {
 // Launch any kernel with error checking and a sync afterwards; grid/block
 // accept dim3 or plain ints. The same boilerplate the builders use internally.
 template <typename... Params, typename... Args>
-inline void launch(void (*kernel)(Params...), dim3 grid, dim3 block,
-                   Args... args) {
+inline void launch(void (*kernel)(Params...), dim3 grid, dim3 block, Args... args) {
   kernel<<<grid, block>>>(args...);
   OPWORKS_CUDA_CHECK(cudaGetLastError());
   OPWORKS_CUDA_CHECK(cudaDeviceSynchronize());

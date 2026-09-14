@@ -87,15 +87,15 @@ Operator skeletons (`ops/` layer, raw pointers):
 
 | Skeleton | Call | Result |
 |---|---|---|
-| `map` | `ops::map(a, b, out, n, op)` / `ops::map(in, out, n, op)` | binary / unary elementwise, float4 when aligned |
+| `map` | `ops::map(a, b, out, n, op)` / `ops::map(in, out, n, op)` | binary / unary elementwise, 4-wide packed when 16B-aligned |
 | `reduce` | `ops::reduce<Op>(in, out, n)` | two-pass reduction to `out[0]` |
 | `softmax` | `ops::softmax(in, out, rows, cols)` | row-wise softmax |
 | `layer_norm` | `ops::layer_norm(in, out, gamma, beta, rows, cols, eps)` | row-wise layer normalization |
 | `mat_mul` | `ops::mat_mul(A, B, C, M, N, K[, epilogue])` | `C(MxK) = epilogue(A(MxN) @ B(NxK))` |
 
-`ElementwiseBuilder` vectorizes to float4 automatically when inputs are
-16-byte aligned (scalar tail + scalar fallback otherwise) — you always write a
-plain scalar functor.
+`ElementwiseBuilder` vectorizes 4-wide automatically when inputs are 16-byte
+aligned (scalar tail + scalar fallback otherwise) — you always write a plain
+scalar functor.
 
 Framework primitives for custom kernels:
 
@@ -122,18 +122,23 @@ include/
 ├── opworks                  # extensionless umbrella — #include <opworks>
 ├── core/
 │   ├── cuda_utils.cuh       # CUDA_CHECK + launch + loop macros + grid sizing
-│   ├── device_buffer.cuh    # RAII device buffer
 │   └── block_reduce.cuh     # warp-shuffle block reduction primitives
+├── container/
+│   └── device_buffer.cuh    # DeviceBuffer — RAII device memory
 ├── builders/
 │   ├── elementwise.cuh      # DeviceBuffer sugar over ops::map
 │   └── reduction.cuh        # DeviceBuffer sugar over ops::reduce
 └── ops/                     # raw-pointer operator skeletons
-    ├── elementwise.cuh      # ops::map, float4-vectorized
+    ├── elementwise.cuh      # ops::map, oneflow-style variadic pack kernel
     ├── reduction.cuh        # ops::reduce, two-pass
     ├── softmax.cuh          # ops::softmax, row-wise
     ├── layer_norm.cuh       # ops::layer_norm, row-wise
     └── matmul.cuh           # ops::mat_mul, tiled GEMM with epilogue hook
 ```
+
+Layering: `core` ← `container` ← `ops` ← `builders`. Kernels and internal
+functors live in `opworks::detail`; the public surface is `opworks::` plus
+`opworks::ops::`.
 
 ## Design notes
 
@@ -141,8 +146,9 @@ Borrowed from [oneflow](https://github.com/Oneflow-Inc/oneflow)'s elementwise
 CUDA design:
 
 - stride-loop macros (`CUDA_1D_KERNEL_LOOP`, `core/device/cuda_util.h`)
-- float4 packing with scalar tail + alignment fallback
-  (`core/cuda/elementwise.cuh`)
+- one generic variadic elementwise kernel instantiated at pack size 4 / 1,
+  with the scalar tail folded into the same kernel
+  (`core/cuda/elementwise.cuh`'s `Pack` / `ApplyGeneric` / `LaunchKernel`)
 - adaptive grid sizing capped at `kNumWaves` resident blocks per SM
   (`GetNumBlocks`)
 - stateful functors carried into the kernel by value (their `WithFactory`

@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "cuda_utils.cuh"
+#include "../core/cuda_utils.cuh"
 
 namespace opworks {
 
@@ -20,8 +20,7 @@ class DeviceBuffer {
   DeviceBuffer(const DeviceBuffer&) = delete;
   DeviceBuffer& operator=(const DeviceBuffer&) = delete;
 
-  DeviceBuffer(DeviceBuffer&& o) noexcept
-      : ptr_(o.ptr_), n_(o.n_), owned_(o.owned_) {
+  DeviceBuffer(DeviceBuffer&& o) noexcept : ptr_(o.ptr_), n_(o.n_), owned_(o.owned_) {
     o.ptr_ = nullptr;
     o.n_ = 0;
     o.owned_ = false;
@@ -41,8 +40,7 @@ class DeviceBuffer {
 
   static DeviceBuffer from_host(const std::vector<float>& h) {
     DeviceBuffer buf(static_cast<int>(h.size()));
-    OPWORKS_CUDA_CHECK(cudaMemcpy(buf.ptr_, h.data(), sizeof(float) * h.size(),
-                                  cudaMemcpyHostToDevice));
+    OPWORKS_CUDA_CHECK(cudaMemcpy(buf.ptr_, h.data(), sizeof(float) * h.size(), cudaMemcpyHostToDevice));
     return buf;
   }
 
@@ -57,8 +55,7 @@ class DeviceBuffer {
 
   std::vector<float> to_host() const {
     std::vector<float> h(n_);
-    OPWORKS_CUDA_CHECK(cudaMemcpy(h.data(), ptr_, sizeof(float) * n_,
-                                  cudaMemcpyDeviceToHost));
+    OPWORKS_CUDA_CHECK(cudaMemcpy(h.data(), ptr_, sizeof(float) * n_, cudaMemcpyDeviceToHost));
     return h;
   }
 

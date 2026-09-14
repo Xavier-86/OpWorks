@@ -36,7 +36,9 @@ __device__ float block_reduce_all(float val) {
   return result;
 }
 
-namespace detail {
+}  // namespace opworks
+
+namespace opworks::detail {
 
 // Internal reduction ops shared by the ops/ skeletons.
 struct ReduceSum {
@@ -48,6 +50,4 @@ struct ReduceMax {
   static __device__ float combine(float a, float b) { return fmaxf(a, b); }
 };
 
-}  // namespace detail
-
-}  // namespace opworks
+}  // namespace opworks::detail

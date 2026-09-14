@@ -2,22 +2,17 @@
 
 #include "../core/cuda_utils.cuh"
 
-namespace opworks::ops {
-
-namespace detail {
+namespace opworks::detail {
 
 struct PassThrough {
   __device__ float operator()(float x) const { return x; }
 };
 
-}  // namespace detail
-
-// Tiled GEMM skeleton: C(MxK) = epilogue(A(MxN) @ B(NxK)).
-// 64x64 block tile, 16x16 threads, each thread computes a 4x4 sub-tile.
-// Epilogue is a unary elementwise functor applied to every output element.
+// Tiled GEMM kernel: 64x64 block tile, 16x16 threads, each thread computes a
+// 4x4 sub-tile. Epilogue is a unary elementwise functor applied to every
+// output element.
 template <typename Epilogue>
-__global__ void mat_mul_kernel(const float* A, const float* B, float* C, int M,
-                               int N, int K, Epilogue epilogue) {
+__global__ void mat_mul_kernel(const float* A, const float* B, float* C, int M, int N, int K, Epilogue epilogue) {
   constexpr int kTile = 64;
   constexpr int kBlock = 16;
   __shared__ float tileA[kTile][kBlock + 1];  // +1 avoids bank conflicts
@@ -71,12 +66,14 @@ __global__ void mat_mul_kernel(const float* A, const float* B, float* C, int M,
   }
 }
 
+}  // namespace opworks::detail
+
+namespace opworks::ops {
+
 // C(MxK) = epilogue(A(MxN) @ B(NxK)); the default epilogue is pass-through.
 template <typename Epilogue = detail::PassThrough>
-inline void mat_mul(const float* A, const float* B, float* C, int M, int N,
-                    int K, Epilogue epilogue = {}) {
-  launch(mat_mul_kernel<Epilogue>, dim3((K + 63) / 64, (M + 63) / 64),
-         dim3(16, 16), A, B, C, M, N, K, epilogue);
+inline void mat_mul(const float* A, const float* B, float* C, int M, int N, int K, Epilogue epilogue = {}) {
+  launch(detail::mat_mul_kernel<Epilogue>, dim3((K + 63) / 64, (M + 63) / 64), dim3(16, 16), A, B, C, M, N, K, epilogue);
 }
 
 }  // namespace opworks::ops

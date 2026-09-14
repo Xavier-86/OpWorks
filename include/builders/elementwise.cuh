@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../core/device_buffer.cuh"
+#include "../container/device_buffer.cuh"
 #include "../ops/elementwise.cuh"
 
 namespace opworks {
@@ -8,11 +8,9 @@ namespace opworks {
 class ElementwiseBuilder {
  public:
   // binary: out[i] = op(a[i], b[i])
-  ElementwiseBuilder(const DeviceBuffer& a, const DeviceBuffer& b)
-      : a_(a.data()), b_(b.data()), n_(a.size()) {}
+  ElementwiseBuilder(const DeviceBuffer& a, const DeviceBuffer& b) : a_(a.data()), b_(b.data()), n_(a.size()) {}
   // unary: out[i] = op(in[i])
-  explicit ElementwiseBuilder(const DeviceBuffer& a)
-      : a_(a.data()), n_(a.size()) {}
+  explicit ElementwiseBuilder(const DeviceBuffer& a) : a_(a.data()), n_(a.size()) {}
 
   // op may carry runtime state (e.g. ScaleAdd{alpha}); it is copied to the
   // kernel by value. Stateless functors can keep calling apply<Op>().

@@ -1,14 +1,13 @@
 #pragma once
 
-#include "../core/device_buffer.cuh"
+#include "../container/device_buffer.cuh"
 #include "../ops/reduction.cuh"
 
 namespace opworks {
 
 class ReductionBuilder {
  public:
-  explicit ReductionBuilder(const DeviceBuffer& in)
-      : in_(in.data()), n_(in.size()) {}
+  explicit ReductionBuilder(const DeviceBuffer& in) : in_(in.data()), n_(in.size()) {}
 
   template <typename Op>
   DeviceBuffer apply() {

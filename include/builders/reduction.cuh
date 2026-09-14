@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../core/device_buffer.cuh"
-#include "../ops/reduce.cuh"
+#include "../ops/reduction.cuh"
 
 namespace opworks {
 

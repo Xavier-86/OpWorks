@@ -129,7 +129,7 @@ include/
 │   └── reduction.cuh        # DeviceBuffer sugar over ops::reduce
 └── ops/                     # raw-pointer operator skeletons
     ├── elementwise.cuh      # ops::map, float4-vectorized
-    ├── reduce.cuh           # ops::reduce, two-pass
+    ├── reduction.cuh        # ops::reduce, two-pass
     ├── softmax.cuh          # ops::softmax, row-wise
     ├── layer_norm.cuh       # ops::layer_norm, row-wise
     └── matmul.cuh           # ops::mat_mul, tiled GEMM with epilogue hook

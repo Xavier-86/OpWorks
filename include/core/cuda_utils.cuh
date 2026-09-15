@@ -48,6 +48,13 @@ inline int num_blocks_for(int n) {
 #define OPWORKS_BLOCK_LOOP(i, n) \
   for (int i = threadIdx.x; i < (n); i += blockDim.x)
 
+// Same stride loop over a flattened 2D/3D block: thread linear id and stride
+// cover the whole block, not just the x dimension.
+#define OPWORKS_BLOCK_LOOP_FLAT(i, n)                                      \
+  for (int i = threadIdx.x + threadIdx.y * blockDim.x +                    \
+              threadIdx.z * blockDim.x * blockDim.y;                       \
+       i < (n); i += blockDim.x * blockDim.y * blockDim.z)
+
 // Launch any kernel with error checking and a sync afterwards; grid/block
 // accept dim3 or plain ints. The same boilerplate the builders use internally.
 template <typename... Params, typename... Args>

@@ -18,7 +18,6 @@ __global__ void mat_mul_kernel(const float* A, const float* B, float* C, int M, 
   __shared__ float tileA[kTile][kBlock + 1];  // +1 avoids bank conflicts
   __shared__ float tileB[kBlock][kTile + 1];
 
-  const int tid = threadIdx.x + threadIdx.y * kBlock;
   const int block_row = blockIdx.y * kTile;
   const int block_col = blockIdx.x * kTile;
 
@@ -26,13 +25,13 @@ __global__ void mat_mul_kernel(const float* A, const float* B, float* C, int M, 
 
   for (int t = 0; t < (N + kBlock - 1) / kBlock; ++t) {
 #pragma unroll
-    for (int i = tid; i < kTile * kBlock; i += kBlock * kBlock) {
+    OPWORKS_BLOCK_LOOP_FLAT(i, kTile * kBlock) {
       int r = i / kBlock, c = i % kBlock;
       int gr = block_row + r, gc = t * kBlock + c;
       tileA[r][c] = (gr < M && gc < N) ? A[gr * N + gc] : 0.f;
     }
 #pragma unroll
-    for (int i = tid; i < kBlock * kTile; i += kBlock * kBlock) {
+    OPWORKS_BLOCK_LOOP_FLAT(i, kBlock * kTile) {
       int r = i / kTile, c = i % kTile;
       int gr = t * kBlock + r, gc = block_col + c;
       tileB[r][c] = (gr < N && gc < K) ? B[gr * K + gc] : 0.f;

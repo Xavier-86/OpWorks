@@ -8,27 +8,38 @@ namespace opworks {
 class ElementwiseBuilder {
   public:
     // binary: out[i] = op(a[i], b[i])
-    ElementwiseBuilder(const DeviceBuffer& a, const DeviceBuffer& b) : a_(a.data()), b_(b.data()), n_(a.size()) {}
+    ElementwiseBuilder(DeviceSpan<const float> a, DeviceSpan<const float> b) : a_(a), b_(b), arity_(2) {
+        detail::require(a.size() == b.size(), "elementwise inputs must have equal lengths");
+    }
+    ElementwiseBuilder(const DeviceBuffer &a, const DeviceBuffer &b) : ElementwiseBuilder(a.view(), b.view()) {}
     // unary: out[i] = op(in[i])
-    explicit ElementwiseBuilder(const DeviceBuffer& a) : a_(a.data()), n_(a.size()) {}
+    explicit ElementwiseBuilder(DeviceSpan<const float> a) : a_(a) {}
+    explicit ElementwiseBuilder(const DeviceBuffer &a) : ElementwiseBuilder(a.view()) {}
+
+    // A retained builder borrows its inputs. Reject immediately dangling owners.
+    ElementwiseBuilder(const DeviceBuffer &&) = delete;
+    ElementwiseBuilder(const DeviceBuffer &&, const DeviceBuffer &) = delete;
+    ElementwiseBuilder(const DeviceBuffer &, const DeviceBuffer &&) = delete;
+    ElementwiseBuilder(const DeviceBuffer &&, const DeviceBuffer &&) = delete;
 
     // op may carry runtime state (e.g. ScaleAdd{alpha}); it is copied to the
     // kernel by value. Stateless functors can keep calling apply<Op>().
-    template <typename Op>
-    DeviceBuffer apply(const Op& op = Op{}) {
-        DeviceBuffer out(n_);
+    template <typename Op> DeviceBuffer apply(const Op &op = Op{}, cudaStream_t stream = nullptr) const {
+        static_assert(Op::kArity == 1 || Op::kArity == 2, "elementwise arity must be 1 or 2");
+        detail::require(arity_ == Op::kArity, "functor arity does not match builder inputs");
+        DeviceBuffer out(a_.size());
         if constexpr (Op::kArity == 2) {
-            ops::map(a_, b_, out.data(), n_, op);
+            ops::map(a_.data(), b_.data(), out.data(), a_.size(), op, stream);
         } else {
-            ops::map(a_, out.data(), n_, op);
+            ops::map(a_.data(), out.data(), a_.size(), op, stream);
         }
         return out;
     }
 
   private:
-    const float* a_ = nullptr;
-    const float* b_ = nullptr;
-    int n_ = 0;
+    DeviceSpan<const float> a_;
+    DeviceSpan<const float> b_;
+    int arity_ = 1;
 };
 
-}  // namespace opworks
+} // namespace opworks

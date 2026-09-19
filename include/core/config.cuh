@@ -43,9 +43,9 @@
 namespace opworks {
 
 // Hardware constants — fixed by the CUDA architecture, not tunable.
-constexpr int kWarpSize = 32;                    // threads per warp
-constexpr int kMaxThreadsPerBlock = 1024;        // launch limit
-constexpr unsigned kFullWarpMask = 0xffffffffu;  // __shfl_sync mask: all lanes
+constexpr int kWarpSize = 32;                   // threads per warp
+constexpr int kMaxThreadsPerBlock = 1024;       // launch limit
+constexpr unsigned kFullWarpMask = 0xffffffffu; // __shfl_sync mask: all lanes
 
 // Floating-point extremes, for reduction identities and clamps.
 constexpr float kInf = INFINITY;
@@ -58,15 +58,21 @@ constexpr int kNumWaves = OPWORKS_NUM_WAVES; // resident blocks per SM for laten
 
 constexpr int kPackSize = OPWORKS_PACK_SIZE; // floats per SIMD pack in elementwise kernels
 
-constexpr int kMatmulTile = OPWORKS_MATMUL_TILE;    // output tile edge per thread block
-constexpr int kMatmulBlock = OPWORKS_MATMUL_BLOCK;  // K-slice per step; block is kMatmulBlock^2 threads
-constexpr int kMatmulSub = OPWORKS_MATMUL_SUBTILE;  // per-thread sub-tile edge
+constexpr int kMatmulTile = OPWORKS_MATMUL_TILE;   // output tile edge per thread block
+constexpr int kMatmulBlock = OPWORKS_MATMUL_BLOCK; // K-slice per step; block is kMatmulBlock^2 threads
+constexpr int kMatmulSub = OPWORKS_MATMUL_SUBTILE; // per-thread sub-tile edge
 
 constexpr float kLayerNormEps = OPWORKS_LAYERNORM_EPS; // default layer_norm epsilon
 
-static_assert(kThreads % kWarpSize == 0 && kThreads <= kMaxThreadsPerBlock, "kThreads must be a multiple of kWarpSize and fit in a block");
-static_assert(kPackSize == 1 || kPackSize == 2 || kPackSize == 4, "kPackSize must be 1, 2 or 4 (alignment must be a power of two)");
+static_assert(kThreads > 0 && kThreads % kWarpSize == 0 && kThreads <= kMaxThreadsPerBlock,
+              "kThreads must be a positive multiple of kWarpSize and fit in a block");
+static_assert(kNumWaves > 0, "kNumWaves must be positive");
+static_assert(kPackSize == 1 || kPackSize == 2 || kPackSize == 4,
+              "kPackSize must be 1, 2 or 4 (alignment must be a power of two)");
 static_assert(kMatmulTile == kMatmulBlock * kMatmulSub, "kMatmulTile must equal kMatmulBlock * kMatmulSub");
-static_assert(kMatmulBlock * kMatmulBlock <= kMaxThreadsPerBlock, "matmul thread block must fit in kMaxThreadsPerBlock threads");
+static_assert(kMatmulBlock > 0 && kMatmulSub > 0 && kMatmulTile > 0, "matmul dimensions must be positive");
+static_assert(kMatmulBlock * kMatmulBlock <= kMaxThreadsPerBlock,
+              "matmul thread block must fit in kMaxThreadsPerBlock threads");
+static_assert(kLayerNormEps > 0 && kLayerNormEps <= FLT_MAX, "layer norm epsilon must be finite and positive");
 
-}  // namespace opworks
+} // namespace opworks

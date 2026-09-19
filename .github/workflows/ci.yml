@@ -1,0 +1,19 @@
+name: checks
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: nvidia/cuda:12.8.1-devel-ubuntu24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: apt-get update && apt-get install -y cmake make g++ clang-format-18
+      - name: Format
+        run: >-
+          find include tests/unit tests/integration -type f
+          \( -name '*.cuh' -o -name '*.cu' -o -name opworks \)
+          -exec clang-format-18 --dry-run --Werror {} +
+      - name: Compile library consumers and regression tests
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=80 && cmake --build build -j2
+      # GitHub-hosted runners have no GPU. Run CTest and tests/run.sh on a GPU host.

@@ -2,6 +2,7 @@
 
 #include "core/cuda_utils.cuh"
 #include "core/block_reduce.cuh"
+#include "core/device_span.cuh"
 #include "core/device_buffer.cuh"
 #include "ops/elementwise.cuh"
 #include "ops/reduction.cuh"

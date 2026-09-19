@@ -11,3 +11,8 @@
 #include "ops/matmul.cuh"
 #include "builders/elementwise.cuh"
 #include "builders/reduction.cuh"
+#include "builders/rowwise.cuh"
+#include "builders/matmul.cuh"
+#include "builders/scan.cuh"
+#include "builders/transform.cuh"
+#include "builders/gather_scatter.cuh"

@@ -121,6 +121,22 @@ Operator skeletons (`ops/` layer, raw pointers):
 aligned (scalar tail + scalar fallback otherwise) — you always write a plain
 scalar functor.
 
+Builder configuration scaffolding is also available for operations that will
+grow specialized kernels:
+
+```cpp
+auto row = RowwiseBuilder::rms_norm(input.view(), output.view(), weight.view(), rows, cols);
+row.apply([](const auto &config) { /* launch the RMSNorm kernel */ });
+
+MatmulBuilder gemm(a.view(), b.view(), c.view(), M, N, K);
+gemm.transpose_b().bias(bias.view()).activation(MatmulActivation::relu);
+gemm.apply([](const auto &config) { /* launch the fused GEMM kernel */ });
+```
+
+`ScanBuilder`, `TransformBuilder`, and `GatherScatterBuilder` use the same
+callback boundary. They validate buffer sizes and preserve operation metadata;
+their callbacks are intentionally the extension point for future kernels.
+
 Framework primitives for custom kernels:
 
 - `launch(kernel, grid, block, args...)` — asynchronous default-stream launch;
@@ -224,7 +240,12 @@ include/
 │   └── device_buffer.cuh    # DeviceBuffer — RAII device memory
 ├── builders/
 │   ├── elementwise.cuh      # DeviceBuffer sugar over ops::map
-│   └── reduction.cuh        # DeviceBuffer sugar over ops::reduce
+│   ├── reduction.cuh        # DeviceBuffer sugar over ops::reduce
+│   ├── rowwise.cuh          # softmax/layernorm/RMSNorm configuration
+│   ├── matmul.cuh           # GEMM transpose/bias/activation configuration
+│   ├── scan.cuh             # prefix scan configuration
+│   ├── transform.cuh        # layout/shape transform configuration
+│   └── gather_scatter.cuh   # indexed access configuration
 └── ops/                     # raw-pointer operator skeletons
     ├── elementwise.cuh      # ops::map, variadic pack kernel
     ├── reduction.cuh        # ops::reduce, two-pass

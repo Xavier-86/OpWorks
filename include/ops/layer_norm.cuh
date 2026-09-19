@@ -8,23 +8,23 @@ namespace opworks::detail {
 // static: header-defined non-template kernel needs internal linkage so the
 // header can be included from multiple translation units.
 static __global__ void layer_norm_kernel(const float* in, float* out, const float* gamma, const float* beta, int cols, float eps) {
-  const float* row_in = in + blockIdx.x * cols;
-  float* row_out = out + blockIdx.x * cols;
+    const float* row_in = in + blockIdx.x * cols;
+    float* row_out = out + blockIdx.x * cols;
 
-  float local_sum = ReduceSum::identity();
-  OPWORKS_BLOCK_LOOP(j, cols) { local_sum += row_in[j]; }
-  float mean = block_reduce_all<ReduceSum>(local_sum) / cols;
+    float local_sum = ReduceSum::identity();
+    OPWORKS_BLOCK_LOOP(j, cols) { local_sum += row_in[j]; }
+    float mean = block_reduce_all<ReduceSum>(local_sum) / cols;
 
-  float local_var = ReduceSum::identity();
-  OPWORKS_BLOCK_LOOP(j, cols) {
-    float d = row_in[j] - mean;
-    local_var += d * d;
-  }
-  float rstd = rsqrtf(block_reduce_all<ReduceSum>(local_var) / cols + eps);
+    float local_var = ReduceSum::identity();
+    OPWORKS_BLOCK_LOOP(j, cols) {
+        float d = row_in[j] - mean;
+        local_var += d * d;
+    }
+    float rstd = rsqrtf(block_reduce_all<ReduceSum>(local_var) / cols + eps);
 
-  OPWORKS_BLOCK_LOOP(j, cols) {
-    row_out[j] = (row_in[j] - mean) * rstd * gamma[j] + beta[j];
-  }
+    OPWORKS_BLOCK_LOOP(j, cols) {
+        row_out[j] = (row_in[j] - mean) * rstd * gamma[j] + beta[j];
+    }
 }
 
 }  // namespace opworks::detail
@@ -32,8 +32,8 @@ static __global__ void layer_norm_kernel(const float* in, float* out, const floa
 namespace opworks::ops {
 
 // layer normalization over the last dim of a rows x cols matrix
-inline void layer_norm(const float* in, float* out, const float* gamma, const float* beta, int rows, int cols, float eps = 1e-5f) {
-  launch(detail::layer_norm_kernel, rows, kThreads, in, out, gamma, beta, cols, eps);
+inline void layer_norm(const float* in, float* out, const float* gamma, const float* beta, int rows, int cols, float eps = kLayerNormEps) {
+    launch(detail::layer_norm_kernel, rows, kThreads, in, out, gamma, beta, cols, eps);
 }
 
 }  // namespace opworks::ops

@@ -1,11 +1,11 @@
 # OpWorks operator test bench
 
 Correctness + performance testing for CUDA operators built on OpWorks, driven
-by the official LeetGPU challenge cases.
+by the official challenge cases.
 
 ## Layout
 
-- `runner/` — test runner (git submodule: local LeetGPU judge + challenge pack)
+- `runner/` — test runner (git submodule: local judge + challenge pack)
 - `solutions/` — one self-contained `.cu` per operator under test
   (local scratch, gitignored)
 - `run.sh` — run every solution: example + functional + performance

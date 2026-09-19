@@ -11,8 +11,8 @@ export CPLUS_INCLUDE_PATH="$ROOT/include${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PA
 cd "$ROOT/tests/runner"
 
 run() {
-  echo "=== $1 ==="
-  python scripts/local_test.py "$1" --language cuda --mode all --solution "../solutions/$2"
+    echo "=== $1 ==="
+    python scripts/local_test.py "$1" --language cuda --mode all --solution "../solutions/$2"
 }
 
 run 1_vector_add vector_add.cu

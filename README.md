@@ -109,6 +109,10 @@ Framework primitives for custom kernels:
 - `kThreads` — default block size
 - `OPWORKS_CUDA_CHECK(expr)` — error checking
 
+All tuning knobs (`kThreads`, `kNumWaves`, pack size, matmul tile shapes) live
+in `core/config.cuh` and can be overridden at compile time, e.g.
+`nvcc -DOPWORKS_THREADS=512`.
+
 `DeviceBuffer` is an RAII wrapper around `cudaMalloc`:
 
 - `DeviceBuffer::from_host(vec)` / `to_host()` / `to_host_scalar()` — host copies
@@ -121,42 +125,36 @@ Framework primitives for custom kernels:
 include/
 ├── opworks                  # extensionless umbrella — #include <opworks>
 ├── core/
+│   ├── config.cuh           # tuning knobs (kThreads, kNumWaves, matmul tiles; -DOPWORKS_* overridable)
 │   ├── cuda_utils.cuh       # CUDA_CHECK + launch + loop macros + grid sizing
-│   └── block_reduce.cuh     # warp-shuffle block reduction primitives
-├── container/
+│   ├── block_reduce.cuh     # warp-shuffle block reduction primitives
 │   └── device_buffer.cuh    # DeviceBuffer — RAII device memory
 ├── builders/
 │   ├── elementwise.cuh      # DeviceBuffer sugar over ops::map
 │   └── reduction.cuh        # DeviceBuffer sugar over ops::reduce
 └── ops/                     # raw-pointer operator skeletons
-    ├── elementwise.cuh      # ops::map, oneflow-style variadic pack kernel
+    ├── elementwise.cuh      # ops::map, variadic pack kernel
     ├── reduction.cuh        # ops::reduce, two-pass
     ├── softmax.cuh          # ops::softmax, row-wise
     ├── layer_norm.cuh       # ops::layer_norm, row-wise
     └── matmul.cuh           # ops::mat_mul, tiled GEMM with epilogue hook
 ```
 
-Layering: `core` ← `container` ← `ops` ← `builders`. Kernels and internal
+Layering: `core` ← `ops` ← `builders`. Kernels and internal
 functors live in `opworks::detail`; the public surface is `opworks::` plus
 `opworks::ops::`.
 
 ## Design notes
 
-Borrowed from [oneflow](https://github.com/Oneflow-Inc/oneflow)'s elementwise
-CUDA design:
-
-- stride-loop macros (`CUDA_1D_KERNEL_LOOP`, `core/device/cuda_util.h`)
+- grid/block-stride loop macros (`OPWORKS_GRID_LOOP` / `OPWORKS_BLOCK_LOOP`)
+  let one kernel cover any problem size without a grid-size calculation per
+  launch
 - one generic variadic elementwise kernel instantiated at pack size 4 / 1,
   with the scalar tail folded into the same kernel
-  (`core/cuda/elementwise.cuh`'s `Pack` / `ApplyGeneric` / `LaunchKernel`)
-- adaptive grid sizing capped at `kNumWaves` resident blocks per SM
-  (`GetNumBlocks`)
-- stateful functors carried into the kernel by value (their `WithFactory`
-  idea; kernel arguments are already device-side constants, so no factory
-  indirection is needed)
-
-oneflow's `Apply2` SFINAE hook is intentionally not adopted: it targets
-half2-style SIMD pairs, and fp32 has no packed 2-wide instruction.
+- adaptive grid sizing capped at `kNumWaves` resident blocks per SM, so huge
+  inputs do not flood the scheduler
+- stateful functors carried into the kernel by value (kernel arguments are
+  already device-side constants, so no factory indirection is needed)
 
 ## Editor setup (clangd)
 

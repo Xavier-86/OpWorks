@@ -8,6 +8,16 @@ by the official challenge cases.
 - `runner/` — test runner (git submodule: local judge + challenge pack)
 - `integration/` — six version-controlled CUDA adapters
 - `unit/` — framework contracts, ownership, boundaries, streams and graph replay
+- `model/` — Llama inference operator and model tests (need `tests/fixtures/llama/`,
+  skipped with code 77 when fixtures are absent; built with `-DOPWORKS_BUILD_LLAMA=ON`).
+  `ops_test.cu` covers each operator against `ops_fixtures.pack` plus the
+  chunked-vs-explicit attention self-check at length 2500 and the bf16/WMMA
+  GEMM paths; `llama_test.cu` / `llama_bf16_test.cu` share
+  `model_test_body.cuh` (per-layer hidden alignment, logits, greedy
+  regression over 20 prompts, KV-cache consistency, long-context prefill,
+  session isolation) with FP32/BF16 thresholds; `test_tokenizer.py` covers
+  the chat-template pipeline (determinism, single BOS, Unicode/newlines,
+  special-token text).
 - `run.sh` — configure/build with CMake, run CTest, then upstream challenge cases
 - `run.py` — load CMake-built shared libraries and use the runner's case utilities
 - `solutions/` — optional personal scratch, ignored and never required by tests

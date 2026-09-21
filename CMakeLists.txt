@@ -33,3 +33,53 @@ if(BUILD_TESTING)
             PREFIX "" LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/integration")
     endforeach()
 endif()
+
+# Llama inference runtime (opt-in): C ABI shared library plus model tests.
+option(OPWORKS_BUILD_LLAMA "Build the Llama inference runtime and model tests" OFF)
+if(OPWORKS_BUILD_LLAMA)
+    add_library(opworks_llama SHARED src/llama_c_api.cu)
+    target_link_libraries(opworks_llama PRIVATE OpWorks::opworks)
+
+    if(BUILD_TESTING)
+        add_executable(llama_ops_test tests/model/ops_test.cu)
+        target_link_libraries(llama_ops_test PRIVATE OpWorks::opworks)
+        add_test(NAME llama_ops
+                 COMMAND llama_ops_test "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/llama/ops_fixtures.pack")
+        set_tests_properties(llama_ops PROPERTIES SKIP_RETURN_CODE 77)
+
+        add_executable(llama_model_test tests/model/llama_test.cu)
+        target_link_libraries(llama_model_test PRIVATE OpWorks::opworks)
+        add_test(NAME llama_model
+                 COMMAND llama_model_test "${CMAKE_CURRENT_SOURCE_DIR}/data/llama-fp32.pack"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/llama/model_fixtures.pack"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/llama/longctx_fixtures.pack"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/llama/regression_fixtures.pack")
+        set_tests_properties(llama_model PROPERTIES SKIP_RETURN_CODE 77)
+
+        add_executable(llama_bf16_test tests/model/llama_bf16_test.cu)
+        target_link_libraries(llama_bf16_test PRIVATE OpWorks::opworks)
+        add_test(NAME llama_bf16
+                 COMMAND llama_bf16_test "${CMAKE_CURRENT_SOURCE_DIR}/data/llama-bf16.pack"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/llama/model_fixtures.pack"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/llama/longctx_fixtures.pack"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/llama/regression_fixtures.pack")
+        set_tests_properties(llama_bf16 PROPERTIES SKIP_RETURN_CODE 77)
+
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.venv/bin/python3")
+            set(OPWORKS_MODEL_PYTHON "${CMAKE_CURRENT_SOURCE_DIR}/.venv/bin/python3")
+        else()
+            find_package(Python3 COMPONENTS Interpreter)
+            set(OPWORKS_MODEL_PYTHON "${Python3_EXECUTABLE}")
+        endif()
+        if(OPWORKS_MODEL_PYTHON)
+            add_test(NAME llama_tokenizer
+                     COMMAND ${OPWORKS_MODEL_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/tests/model/test_tokenizer.py")
+            set_tests_properties(llama_tokenizer PROPERTIES SKIP_RETURN_CODE 77
+                                 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+            add_test(NAME llama_edges
+                     COMMAND ${OPWORKS_MODEL_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/tests/model/test_edges.py")
+            set_tests_properties(llama_edges PROPERTIES SKIP_RETURN_CODE 77
+                                 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+        endif()
+    endif()
+endif()

@@ -17,6 +17,11 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 *.py[cod]
+.venv/
+
+# Model weights, exported packs, and reference fixtures (too large for Git).
+data/
+tests/fixtures/llama/
 
 # CUDA/C++ compiler artifacts that may be emitted outside build/.
 *.o

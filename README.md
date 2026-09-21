@@ -7,6 +7,11 @@ It provides memory management, launch helpers, block-reduction primitives,
 two generic builders (map / reduce), and an `ops/` layer with generic map/reduce,
 row softmax/layer normalization, and tiled matrix multiplication.
 
+On top of the framework, an opt-in Llama-3.2-1B-Instruct inference runtime
+(`-DOPWORKS_BUILD_LLAMA=ON`) runs the full model forward pass, KV cache and
+greedy / temperature-top-p sampling on OpWorks' own kernels — see
+[Llama inference runtime](#llama-inference-runtime).
+
 ```cpp
 #include <opworks>
 using namespace opworks;
@@ -227,6 +232,100 @@ Migration: replace `DeviceBuffer::wrap` with `DeviceSpan<float>` or
 `DeviceSpan<const float>`; replace old synchronous `launch` calls with
 `launch_sync`, or synchronize once at the end of a chain.
 
+## Llama inference runtime
+
+Opt-in (`-DOPWORKS_BUILD_LLAMA=ON`) implementation of Llama-3.2-1B-Instruct
+inference on OpWorks' own CUDA kernels. FP32 and BF16 weight packs, batch=1,
+up to 8192 total sequence length, greedy and temperature/top-p sampling.
+Python drives tokenization (HF chat template) and the CLI; the model forward,
+KV cache and decode loop run entirely in C++/CUDA behind a small C ABI
+(`build/libopworks_llama.so`, called via ctypes — no LibTorch dependency).
+
+### Quickstart
+
+```bash
+# one-time: convert an HF snapshot into an OpWorks pack (FP32 or BF16)
+python scripts/llama/export_weights.py --model-dir /path/to/snapshot \
+    --output data/llama-fp32.pack --dtype float32    # or bfloat16
+
+cmake -S . -B build -DOPWORKS_BUILD_LLAMA=ON -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_CUDA_ARCHITECTURES=89
+cmake --build build --parallel 2
+
+python examples/llama/generate.py --model data/llama-bf16.pack \
+    --tokenizer /path/to/snapshot --prompt "Explain what a GPU does." \
+    --max-seq-len 8192 --max-new-tokens 128 \
+    [--temperature 0.6 --top-p 0.9 --seed 42]   # default temperature=0 = greedy
+
+python scripts/llama/benchmark.py --model data/llama-bf16.pack \
+    --tokenizer /path/to/snapshot [--hf-baseline]
+```
+
+Weight packs, snapshots and fixtures live under the gitignored `data/` and
+`tests/fixtures/llama/`; `data/manifest.json` records the locked versions
+(source revision, pack sha256, toolchain). The weights came from the ungated
+`unsloth/Llama-3.2-1B-Instruct` mirror at commit `5a8abab4` (huggingface.co
+is unreachable from this host and the official repo is gated; the safetensors
+sha256 is recorded in every pack's manifest). `--hf-baseline` needs Python
+headers for torch's triton path (e.g. `python3-dev`, or point `CPATH` at an
+existing `include/python3.12`).
+
+### Design
+
+- Layering stays `core` ← `ops` ← `builders`; the model code lives in
+  `include/runtime/` (pack reader, config, weights, KV cache, workspace) and
+  `include/models/llama.cuh`, so generic ops never depend on the model.
+- Model ops under `include/ops/`: `embedding`, `rms_norm`, `linear` (fp32 and
+  bf16 weights, fp32 accumulation), `linear_mma` (WMMA tensor-core bf16 for
+  prefill GEMMs), `rope` (llama3 frequency scaling), `swiglu`, `argmax`,
+  `split_heads`, `causal_scale`, `attention_prefill` (chunked online-softmax,
+  used past 2048 rows — no quadratic score matrix), `attention_decode`
+  (single-query GQA over the KV cache).
+- Weights keep the HF `[out, in]` layout and are read transposed on the fly;
+  the embedding doubles as the LM head (tied). Activations and the KV cache
+  are fp32; weights may be fp32 or bf16.
+- Sessions own their KV cache (`[8, max_seq, 64]` per layer per K/V), scratch
+  buffers and CUDA stream; nothing is allocated per token on the hot path.
+- The C ABI captures all C++ exceptions; token sampling happens host-side
+  from the last-position logits, so the FFI stays small.
+
+### Correctness
+
+`ctest -R llama` covers: every operator against exported fixtures
+(`ops_fixtures.pack`), per-layer hidden-state and final-logits alignment with
+a fixed HF reference (`transformers` 5.17, fp32, eager attention, TF32 off),
+greedy generation regression over 20 fixed prompts (0 token divergences,
+fp32 and bf16 engines), KV-cache consistency (decode vs full-prefix recompute
+at lengths 1/2/31/32/33/127/128/129 plus capacity boundaries), long-context
+(2500-token) prefill through the chunked path, tokenizer pipeline edge cases
+(empty/Unicode/newlines/multi-turn/special-token text), session isolation and
+reset, and CLI edge cases (out-of-vocab ids, over-capacity, empty prompt,
+`max_new_tokens` 0/1). `compute-sanitizer` memcheck reports 0 errors over
+the operator and full bf16 model tests (use the CUDA 12.8 sanitizer at
+`/usr/local/cuda-12.8/bin/compute-sanitizer`; the PATH default 12.0 build
+lacks its injection library). Tests skip with code 77 when the packs or
+fixtures are absent; regenerate them with `scripts/llama/export_reference.py`
+and `scripts/llama/export_regression.py`.
+
+### Performance
+
+Measured on this repo's RTX 4080 SUPER (batch=1, greedy, 128 generated
+tokens, median of 10 after warmup; reproduce with `scripts/llama/benchmark.py`):
+
+| prompt tokens | TTFT (BF16) | decode (BF16) | decode (FP32) | HF bf16 e2e |
+| --- | --- | --- | --- | --- |
+| 128 | 48.6 ms | 232 tok/s | 127 tok/s | 183 tok/s |
+| 512 | 103.5 ms | 215 tok/s | 122 tok/s | 180 tok/s |
+| 1024 | 183.9 ms | 198 tok/s | 116 tok/s | 177 tok/s |
+| 4096 | 711.3 ms | 134 tok/s | — | 150 tok/s |
+| 8000 | 1874.3 ms | 95 tok/s | — | 122 tok/s |
+
+Peak GPU memory: 4.6 GiB (BF16, 8K session) and 5.9 GiB (FP32, 2K session) —
+within the 6/8 GiB design budgets. Model load 1.0 s (BF16) / 3.6 s (FP32);
+tokenizer ~9 ms. Decode is bandwidth-bound (~2.3 GiB of bf16 weights per
+token); known headroom: kernel-launch overhead (~190 launches/token, CUDA
+Graphs would remove it) and split-KV decode attention at long contexts.
+
 ## Layout
 
 ```
@@ -237,7 +336,8 @@ include/
 │   ├── cuda_utils.cuh       # CUDA_CHECK + launch + loop macros + grid sizing
 │   ├── block_reduce.cuh     # warp-shuffle block reduction primitives
 │   ├── device_span.cuh      # const-correct, non-owning device views
-│   └── device_buffer.cuh    # DeviceBuffer — RAII device memory
+│   ├── device_buffer.cuh    # DeviceBuffer — RAII device memory (fp32)
+│   └── typed_device_buffer.cuh  # TypedDeviceBuffer<T> — fp32 / int32 / bf16
 ├── builders/
 │   ├── elementwise.cuh      # DeviceBuffer sugar over ops::map
 │   ├── reduction.cuh        # DeviceBuffer sugar over ops::reduce
@@ -246,12 +346,21 @@ include/
 │   ├── scan.cuh             # prefix scan configuration
 │   ├── transform.cuh        # layout/shape transform configuration
 │   └── gather_scatter.cuh   # indexed access configuration
-└── ops/                     # raw-pointer operator skeletons
-    ├── elementwise.cuh      # ops::map, variadic pack kernel
-    ├── reduction.cuh        # ops::reduce, two-pass
-    ├── softmax.cuh          # ops::softmax, row-wise
-    ├── layer_norm.cuh       # ops::layer_norm, row-wise
-    └── matmul.cuh           # ops::mat_mul, tiled GEMM with epilogue hook
+├── ops/                     # raw-pointer operator skeletons
+│   ├── elementwise.cuh      # ops::map, variadic pack kernel
+│   ├── reduction.cuh        # ops::reduce, two-pass
+│   ├── softmax.cuh          # ops::softmax, row-wise
+│   ├── layer_norm.cuh       # ops::layer_norm, row-wise
+│   ├── matmul.cuh           # ops::mat_mul, tiled GEMM with epilogue hook
+│   └── ...                  # model ops: embedding/rms_norm/linear(+mma)/rope/
+│                            #   swiglu/argmax/split_heads/causal_scale/attention_*
+├── runtime/                 # Llama runtime: json, pack_reader, model_config,
+│                            #   weights, kv_cache, workspace
+├── models/llama.cuh         # Llama decoder forward + sessions
+src/llama_c_api.cu           # C ABI shared library (OPWORKS_BUILD_LLAMA)
+examples/llama/generate.py   # Python ctypes CLI
+scripts/llama/               # weight export, reference fixtures, benchmark
+tests/model/                 # operator/model/tokenizer/edge tests for the runtime
 ```
 
 Layering: `core` ← `ops` ← `builders`. Kernels and internal
@@ -285,7 +394,10 @@ gitignored; re-run the script on a new machine.
 
 ## Checks
 
-Run `tests/run.sh` for framework tests and the six upstream challenge adapters.
-See [tests/README.md](tests/README.md) for setup, coverage and sanitizer commands.
+Run `tests/run.sh` for framework tests and the six upstream challenge adapters
+(needs a `python` on PATH, e.g. the local `.venv`). The Llama runtime tests
+are separate: configure with `-DOPWORKS_BUILD_LLAMA=ON` and run
+`ctest -R llama`. See [tests/README.md](tests/README.md) for setup, coverage
+and sanitizer commands.
 Formatting uses `.clang-format` with clang-format 18. CI checks formatting and
 compiles all test consumers without requiring a GPU; runtime checks run on a GPU host.

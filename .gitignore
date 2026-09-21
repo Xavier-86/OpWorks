@@ -18,6 +18,7 @@ __pycache__/
 .mypy_cache/
 *.py[cod]
 .venv/
+.venv-vllm/
 
 # Model weights, exported packs, and reference fixtures (too large for Git).
 data/

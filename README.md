@@ -310,21 +310,39 @@ and `scripts/llama/export_regression.py`.
 ### Performance
 
 Measured on this repo's RTX 4080 SUPER (batch=1, greedy, 128 generated
-tokens, median of 10 after warmup; reproduce with `scripts/llama/benchmark.py`):
+tokens, median of repetitions after warmup; reproduce with
+`scripts/llama/benchmark.py` and `scripts/llama/benchmark_vllm.py`).
 
-| prompt tokens | TTFT (BF16) | decode (BF16) | decode (FP32) | HF bf16 e2e |
-| --- | --- | --- | --- | --- |
-| 128 | 48.6 ms | 232 tok/s | 127 tok/s | 183 tok/s |
-| 512 | 103.5 ms | 215 tok/s | 122 tok/s | 180 tok/s |
-| 1024 | 183.9 ms | 198 tok/s | 116 tok/s | 177 tok/s |
-| 4096 | 711.3 ms | 134 tok/s | — | 150 tok/s |
-| 8000 | 1874.3 ms | 95 tok/s | — | 122 tok/s |
+Decode (tokens/s) and TTFT (prefill, ms) versus vLLM 0.29 (bf16, CUDA
+graphs + paged attention, prefix caching disabled so every rep recomputes
+the prompt):
+
+| prompt tokens | OpWorks TTFT | vLLM TTFT | OpWorks decode | vLLM decode | HF bf16 e2e |
+| --- | --- | --- | --- | --- | --- |
+| 128 | 48.6 ms | 6.9 ms | 232 tok/s | 250 tok/s | 183 tok/s |
+| 512 | 103.5 ms | 15.1 ms | 215 tok/s | 250 tok/s | 180 tok/s |
+| 1024 | 183.9 ms | 27.0 ms | 198 tok/s | 250 tok/s | 177 tok/s |
+| 4096 | 711.3 ms | 103.4 ms | 134 tok/s | 240 tok/s | 150 tok/s |
+| 8000 | 1874.3 ms | 226.9 ms | 95 tok/s | 230 tok/s | 122 tok/s |
+
+Reading the gap: at short contexts decode is bandwidth-bound (~2.3 GiB of
+bf16 weights per token) and OpWorks sits within ~7% of vLLM; the gap grows
+to ~2.4x at 8K contexts where vLLM's flash-decoding wins. TTFT is 7-8x
+behind vLLM across the board — vLLM prefill runs fused bf16 kernels under
+CUDA graphs while our prefill is fp32-activation SIMT/WMMA kernels with
+per-op launches. Known headroom, in order: kernel-launch overhead
+(~190 launches/token, CUDA Graphs would remove it), split-KV decode
+attention at long contexts, bf16 activations end-to-end.
 
 Peak GPU memory: 4.6 GiB (BF16, 8K session) and 5.9 GiB (FP32, 2K session) —
-within the 6/8 GiB design budgets. Model load 1.0 s (BF16) / 3.6 s (FP32);
-tokenizer ~9 ms. Decode is bandwidth-bound (~2.3 GiB of bf16 weights per
-token); known headroom: kernel-launch overhead (~190 launches/token, CUDA
-Graphs would remove it) and split-KV decode attention at long contexts.
+within the 6/8 GiB design budgets. FP32 decode runs at 127 tok/s (128-token
+prompt) for reference. Model load 1.0 s (BF16) / 3.6 s (FP32)
+vs vLLM 9.4 s; tokenizer ~9 ms.
+
+The vLLM baseline runs in its own venv (`uv pip install vllm ninja`);
+flashinfer's JIT needs a CUDA >= 12.5 toolkit, so run with
+`CUDA_HOME=/usr/local/cuda-12.8` (and `CPATH` pointing at Python headers)
+on this host.
 
 ## Layout
 
